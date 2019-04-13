@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+    <style type="text/less">
+        .demo1 {
+            width: 500px;
+            margin: 50px auto;
+            text-align: center;
+            > input {
+                height: 30px;
+                width: 100%;
+                outline: none;
+                border: solid 1px #CCC;
+            }
+            .total-count {
+                display: flex;
+                justify-content: space-between;
+                margin-top: 10px;
+                .btn-group {
+                    .btn {
+                        padding: 5px 10px;
+                        display: inline-block;
+                        color: blue;
+                        cursor: pointer;
+                        user-select: none;
+                    }
+                }
+            }
+            .result-list {
+                text-align: left;
+                .item {
+                    position: relative;
+                    background: #EEE;
+                    margin: 10px 0;
+                    padding: 10px;
+                    .item-line {
+                        overflow: hidden;
+                        white-space: nowrap;
+                        text-overflow: ellipsis;
+                    }
+                }
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="main">
+    <div class="demo1">
+        <input type="text" class="search-input"/>
+        <div class="search-result"></div>
+    </div>
+</div>
+<script type="text/javascript" src="https://cdn.staticfile.org/rxjs/5.5.12/Rx.js"></script>
+<script type="text/javascript" src="https://cdn.staticfile.org/jquery/3.3.1/jquery.js"></script>
+<script type="text/javascript">
+    (function () {
+        // 获取github的repos查询api
+        const getQueryApi = (keyword, page) => {
+            return `https://api.github.com/search/repositories?q=${keyword} in:name&sort=stars&order=desc&per_page=5&page=${page}`;
+        };
+        // 渲染数据
+        const renderResult = response => {
+            var data = {
+                total: response.total_count,
+                items: response.items.map(item => ({
+                    name: item.full_name,
+                    url: item.url,
+                    starsCount: item.stargazers_count,
+                    forksCount: item.forks_count
+                }))
+            };
+            const $result = $('.search-result');
+            $('.result-list', $result).empty();
+            let $totalCount = $('.total-count', $result);
+            if (!$totalCount.length) {
+                $('<div class="total-count"><span>共搜索到：<span class="num">' + data.total + '</span>个仓库</span>' +
+                    '<span class="btn-group">' +
+                    '<a class="btn prev">上一页</a>' +
+                    '<a class="btn next">下一页</a>' +
+                    '</span></div>').appendTo($result);
+            } else {
+                $('.num', $totalCount).text(data.total);
+            }
+            const $list = $('<div class="result-list"/>').appendTo($result);
+            data.items.forEach(item => {
+                $('<div class="item">' +
+                    '<div class="item-line"><span class="label">项目名称：</span><span class="value">' + item.name + '</span></div>' +
+                    '<div class="item-line"><span class="label">项目地址：</span><span class="value">' + item.url + '</span></div>' +
+                    '<div class="item-line"><span class="label">stars数量：</span><span class="value">' + item.starsCount + '</span></div>' +
+                    '<div class="item-line"><span class="label">forks数量：</span><span class="value">' + item.forksCount + '</span></div>' +
+                    '</div>').appendTo($list);
+            });
+        };
+
+        // 初始化
+        const init = () => {
+            const initValue$ = getInitValueStream();
+            initValue$.subscribe({
+                next: response => {
+                    renderResult(response);
+                    const updateValue$ = getUpdateValueStream();
+                    updateValue$.subscribe({
+                        next: response => renderResult(response)
+                    });
+                }
+            });
+        };
+
+        getInitValueStream = () => {
+            const input$ = Rx.Observable.fromEvent(document.querySelector('.search-input'), 'input');
+            return input$
+                .debounceTime(500)
+                .pluck('target', 'value')
+                .filter(v => v.length > 0)
+                .distinctUntilChanged()
+                .concatMap(key => {
+                    const queryUrl = getQueryApi(key, 1);
+                    return Rx.Observable.fromPromise($.getJSON(queryUrl))
+                })
+                .map(data => $.extend(data, {page: 1}));
+        };
+
+        getUpdateValueStream = () => {
+            const prev$ = Rx.Observable.fromEvent(document.querySelector('.btn.prev'), 'click');
+            const next$ = Rx.Observable.fromEvent(document.querySelector('.btn.next'), 'click');
+            return prev$
+                .merge(next$)
+                .map(e => {
+                    return e;
+                })
+                .bufferTime(1000)
+                .filter(eList => eList.length > 0)
+                .scan((page, eList) => {
+                    let offset = 0;
+                    eList.forEach(e => {
+                        if ($(e.target).hasClass('next')) {
+                            offset += 1;
+                        } else {
+                            offset -= 1;
+                        }
+                    });
+                    return page + offset;
+                }, 1)
+                .distinctUntilChanged()
+                .concatMap(page => {
+                    const searchKey = $('.search-input').val();
+                    const queryUrl = getQueryApi(searchKey, page);
+                    return Rx.Observable.fromPromise($.getJSON(queryUrl))
+                });
+        };
+
+        init();
+
+    })();
+</script>
+</body>
+</html>
