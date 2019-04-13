@@ -100,11 +100,15 @@
         // 初始化
         const init = () => {
             const initValue$ = getInitValueStream();
+            let subUpdate;
             initValue$.subscribe({
                 next: response => {
                     renderResult(response);
+                    if (subUpdate) {
+                        subUpdate.unsubscribe();
+                    }
                     const updateValue$ = getUpdateValueStream();
-                    updateValue$.subscribe({
+                    subUpdate = updateValue$.subscribe({
                         next: response => renderResult(response)
                     });
                 }
