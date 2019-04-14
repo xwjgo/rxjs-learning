@@ -120,10 +120,7 @@
             const next$ = Rx.Observable.fromEvent(document.querySelector('.btn.next'), 'click');
             return prev$
                 .merge(next$)
-                .map(e => {
-                    return e;
-                })
-                .bufferTime(1000)
+                .bufferTime(500)
                 .filter(eList => eList.length > 0)
                 .scan((page, eList) => {
                     let offset = 0;
